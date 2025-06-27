@@ -167,3 +167,25 @@ export interface NormalizedParent extends DataObject, Identifiable {
 export const isNormalizedParent = (value: unknown): value is NormalizedParent => {
   return isDataObject(value) && isIdentifiable(value) && (!value.parent || isNormalizedParent(value.parent));
 };
+
+
+/** @internal */
+export const isValidReportedDate = (value: unknown): boolean => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value);
+  }
+
+  if (typeof value === 'string') {
+    const isoRegex = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z)$/;
+    return isoRegex.test(value);
+  }
+
+  return false;
+};
+
+/** @internal */
+export const insertReportedDateIfMissing = (input: Record<string, unknown>) :void => {
+  if (!('reported_date' in input)){
+    input.reported_date = new Date().toISOString();
+  }
+};

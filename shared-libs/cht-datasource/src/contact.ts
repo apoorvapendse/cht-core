@@ -1,7 +1,8 @@
 import {
-  getPagedGenerator, NormalizedParent,
+  DataObject,
+  getPagedGenerator, hasFields, isRecord, isValidReportedDate, NormalizedParent,
   Nullable,
-  Page,
+  Page, insertReportedDateIfMissing
 } from './libs/core';
 import {
   ContactTypeQualifier,
@@ -21,6 +22,7 @@ import {
   assertUuidQualifier,
 } from './libs/parameter-validators';
 import { Doc } from './libs/doc';
+import { InvalidArgumentError } from './libs/error';
 
 /** */
 export namespace v1 {
@@ -138,5 +140,71 @@ export namespace v1 {
       return getPagedGenerator(getPage, qualifier);
     };
     return curriedGen;
+  };
+
+  /** 
+   * An input object to create/update a contact
+   */
+  export type ContactInput = DataObject & Readonly<{
+    type: string,
+    name: string,
+    reported_date?: string | number,
+    _id?: string,
+    _rev?: string
+  }>;
+  
+  /**
+   * Builds an input object for creation and update of a contact with
+   * the given fields.
+   * @param data object containing the fields for a contact
+   * @returns the contact input
+   * @throws Error if data is not an object
+   * @throws Error if type is not provided or is empty
+   * @throws Error if name is not provided or is empty
+   * @throws Error if reported_date is not in a valid format. 
+   * Valid formats are 'YYYY-MM-DDTHH:mm:ssZ', 'YYYY-MM-DDTHH:mm:ss.SSSZ', or <unix epoch>.
+   */
+  export const byContactInput = (data: unknown): ContactInput => {
+    return byContactInputNonAssertive(data) as ContactInput;
+  };
+  
+  /** @internal*/
+  export const byContactInputNonAssertive = (data: unknown) : Record<string, unknown> => {
+    if (!isRecord(data)){
+      throw new InvalidArgumentError('Invalid "data": expected an object.');
+    }
+    const input = {...data};
+    insertReportedDateIfMissing(input);
+    if (!isValidReportedDate(input.reported_date)){
+      throw new InvalidArgumentError(
+        'Invalid reported_date. Expected format to be ' +
+          '\'YYYY-MM-DDTHH:mm:ssZ\', \'YYYY-MM-DDTHH:mm:ss.SSSZ\', or a Unix epoch.'
+      );
+    }
+    if (!checkContactInputFields(input)){
+      throw new InvalidArgumentError(
+        `Missing or empty required fields (name, type) for [${JSON.stringify(data)}].`
+      );
+    }
+    return input;
+  };
+  
+  /**
+   * Returns `true` if the given input is a {@link ContactInput} otherwise `false`.
+   * @param input the input to check
+   * @returns `true` if the given type is a {@link ContactInput}, otherwise `false`.
+   */
+  export const isContactInput = (input: unknown): input is ContactInput => {
+    return checkContactInputFields(input);
+  };
+  
+  /** @internal */
+  export const checkContactInputFields = (data: unknown): data is Record<string, unknown> => {
+    return isRecord(data) && 
+      hasFields(data, [
+        {name: 'type', type: 'string', ensureTruthyValue: true}, 
+        {name: 'name', type: 'string', ensureTruthyValue: true}
+      ]) &&
+      (!('reported_date' in data) || isValidReportedDate(data.reported_date));
   };
 }

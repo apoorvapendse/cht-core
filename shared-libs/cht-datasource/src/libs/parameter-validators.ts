@@ -2,15 +2,13 @@ import { InvalidArgumentError } from './error';
 import {
   ContactTypeQualifier,
   FreetextQualifier,
-  PersonQualifier,
-  PlaceQualifier,
   UuidQualifier,
   isContactTypeQualifier,
   isFreetextQualifier,
-  isPersonQualifier,
-  isPlaceQualifier,
   isUuidQualifier,
 } from '../qualifier';
+import * as Person from '../person';
+import * as Place from '../place';
 import { Nullable } from './core';
 
 /** @internal */
@@ -23,20 +21,20 @@ export const assertTypeQualifier: (qualifier: unknown) => asserts qualifier is C
 };
 
 /** @internal */
-export const assertPersonQualifier: (qualifier: unknown) => asserts qualifier is PersonQualifier = (
-  qualifier: unknown
+export const assertPersonInput: (input: unknown) => asserts input is Person.v1.PersonInput = (
+  input: unknown
 ) => {
-  if (!isPersonQualifier(qualifier)) {
-    throw new InvalidArgumentError(`Invalid person type [${JSON.stringify(qualifier)}].`);
+  if (!Person.v1.isPersonInput(input)) {
+    throw new InvalidArgumentError(`Invalid person type [${JSON.stringify(input)}].`);
   }
 };
 
 /** @internal */
-export const assertPlaceQualifier: (qualifier: unknown) => asserts qualifier is PlaceQualifier = (
-  qualifier: unknown
+export const assertPlaceInput: (input: unknown) => asserts input is Place.v1.PlaceInput = (
+  input: unknown
 ) => {
-  if (!isPlaceQualifier(qualifier)) {
-    throw new InvalidArgumentError(`Invalid place type [${JSON.stringify(qualifier)}].`);
+  if (!Place.v1.isPlaceInput(input)) {
+    throw new InvalidArgumentError(`Invalid place type [${JSON.stringify(input)}].`);
   }
 };
 

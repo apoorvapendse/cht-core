@@ -1,4 +1,4 @@
-import { ContactTypeQualifier, PersonQualifier, UuidQualifier } from './qualifier';
+import { ContactTypeQualifier, UuidQualifier } from './qualifier';
 import { adapt, assertDataContext, DataContext } from './libs/data-context';
 import * as Contact from './contact';
 import * as Remote from './remote';
@@ -6,10 +6,11 @@ import * as Local from './local';
 import * as Place from './place';
 import { LocalDataContext } from './local/libs/data-context';
 import { RemoteDataContext } from './remote/libs/data-context';
-import { getPagedGenerator, NormalizedParent, Nullable, Page } from './libs/core';
+import { getPagedGenerator, hasField, NormalizedParent, Nullable, Page } from './libs/core';
 import { DEFAULT_DOCS_PAGE_LIMIT } from './libs/constants';
-import { assertCursor, assertLimit, assertPersonQualifier, 
+import { assertCursor, assertLimit, assertPersonInput, 
   assertTypeQualifier, assertUuidQualifier } from './libs/parameter-validators';
+import { InvalidArgumentError } from './libs/error';
 
 /** */
 export namespace v1 {
@@ -45,14 +46,14 @@ export namespace v1 {
 
   const createPersonDoc =
   <T>(
-      localFn: (c: LocalDataContext) => (qualifier: PersonQualifier) => Promise<T>,
-      remoteFn: (c: RemoteDataContext) => (qualifier: PersonQualifier) => Promise<T>
+      localFn: (c: LocalDataContext) => (input: PersonInput) => Promise<T>,
+      remoteFn: (c: RemoteDataContext) => (input: PersonInput) => Promise<T>
     ) => (context: DataContext) => {
       assertDataContext(context);
       const fn = adapt(context, localFn, remoteFn);
-      return async (qualifier: PersonQualifier): Promise<T> => {
-        assertPersonQualifier(qualifier);
-        return fn(qualifier);
+      return async (input: PersonInput): Promise<T> => {
+        assertPersonInput(input);
+        return fn(input);
       };
     };
 
@@ -138,4 +139,47 @@ export namespace v1 {
    * @throws Error if a data context is not provided
    */
   export const createPerson = createPersonDoc(Local.Person.v1.createPerson, Remote.Person.v1.createPerson);
+
+
+  /** 
+   * An input for a person
+   */
+  export type PersonInput = Contact.v1.ContactInput & Readonly<{
+    parent: string;
+    date_of_birth?: Date;
+    phone?: string;
+    patient_id?: string;
+    sex?: string;
+  }>
+  
+  /**
+   * Builds an input object for creation and update of a person with
+   * the given fields.
+   * @param data object containing the fields for a person
+   * @returns the person input
+   * @throws Error if data is not an object
+   * @throws Error if type is not provided or is empty
+   * @throws Error if name is not provided or is empty
+   * @throws Error if parent is not provided or is empty
+   * @throws Error if reported_date is not in a valid format. 
+   * Valid formats are 'YYYY-MM-DDTHH:mm:ssZ', 'YYYY-MM-DDTHH:mm:ss.SSSZ', or <unix epoch>.
+   */
+  export const byPersonInput = (data: unknown): PersonInput => {
+    const input = Contact.v1.byContactInputNonAssertive(data);
+    
+    if (!hasField(input, { name: 'parent', type: 'string', ensureTruthyValue: true })) {
+      throw new InvalidArgumentError(`Missing or empty required field (parent) [${JSON.stringify(input)}].`);
+    }
+  
+    return input as unknown as PersonInput;
+  };
+  
+  /** @internal */
+  export const isPersonInput = (data: unknown): data is PersonInput => {
+    if (!Contact.v1.checkContactInputFields(data)) {
+      return false;
+    }
+    
+    return hasField(data, { name: 'parent', type: 'string', ensureTruthyValue: true });
+  };
 }

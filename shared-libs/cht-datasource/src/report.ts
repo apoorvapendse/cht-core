@@ -1,6 +1,10 @@
 import {
   DataObject,
   getPagedGenerator,
+  hasFields,
+  insertReportedDateIfMissing,
+  isRecord,
+  isValidReportedDate,
   Nullable,
   Page
 } from './libs/core';
@@ -11,6 +15,7 @@ import { FreetextQualifier, UuidQualifier } from './qualifier';
 import * as Remote from './remote';
 import { DEFAULT_IDS_PAGE_LIMIT } from './libs/constants';
 import { assertCursor, assertFreetextQualifier, assertLimit, assertUuidQualifier } from './libs/parameter-validators';
+import { InvalidArgumentError } from './libs/error';
 
 /** */
 export namespace v1 {
@@ -108,5 +113,64 @@ export namespace v1 {
       return getPagedGenerator(getPage, qualifier);
     };
     return curriedGen;
+  };
+
+  /** 
+   * An input object for a report
+   */
+  export type ReportInput = Readonly<{
+    type: string,
+    form: string,
+    reported_date?: string | number,
+    _id?: string,
+    _rev?: string
+  }>;
+  
+  /**
+   * Builds an input object for creation and update of a report with
+   * the given fields.
+   * @param data object containing the fields for a report
+   * @returns the report input
+   * @throws Error if data is not an object
+   * @throws Error if type is not provided or is empty
+   * @throws Error if form is not provided or is empty
+   * @throws Error if reported_date is not in a valid format.
+   * Valid formats are 'YYYY-MM-DDTHH:mm:ssZ', 'YYYY-MM-DDTHH:mm:ss.SSSZ', or <unix epoch>.
+   */
+  export const byReportInput = (data: unknown): ReportInput => {
+    if (!isRecord(data)) {
+      throw new InvalidArgumentError('Invalid "data": expected an object.');
+    }
+    
+    const input = {...data};
+    insertReportedDateIfMissing(input);
+    if (!isValidReportedDate(input.reported_date)) {
+      throw new InvalidArgumentError(
+        'Invalid reported_date. Expected format to be ' +
+          '\'YYYY-MM-DDTHH:mm:ssZ\', \'YYYY-MM-DDTHH:mm:ss.SSSZ\', or a Unix epoch.'
+      );
+    }
+    if (!isReportInput(input)) {
+      throw new InvalidArgumentError(`Missing or empty required fields (type, form) in [${JSON.stringify(data)}].`);
+    }
+    return input;
+  };
+  
+  /**
+   * Returns `true` if the given input is a {@link ReportInput} otherwise `false`.
+   * @param input the input to check
+   * @returns `true` if the given type is a {@link ReportInput}, otherwise `false`.
+   */
+  export const isReportInput = (input: unknown): input is ReportInput => {
+    if (isRecord(input) && 
+        hasFields(input, [{name: 'type', type: 'string', ensureTruthyValue: true}, 
+          {name: 'form', type: 'string', ensureTruthyValue: true}])
+    ){
+      if ('reported_date' in input && !isValidReportedDate(input.reported_date)){
+        return false;
+      }
+      return true;
+    }
+    return false;
   };
 }

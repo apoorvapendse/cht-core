@@ -1,15 +1,16 @@
 import * as Contact from './contact';
 import * as Person from './person';
 import { LocalDataContext } from './local/libs/data-context';
-import { ContactTypeQualifier, PlaceQualifier, UuidQualifier } from './qualifier';
+import { ContactTypeQualifier, UuidQualifier } from './qualifier';
 import { RemoteDataContext } from './remote/libs/data-context';
 import { adapt, assertDataContext, DataContext } from './libs/data-context';
 import * as Local from './local';
 import * as Remote from './remote';
-import { getPagedGenerator, NormalizedParent, Nullable, Page } from './libs/core';
+import { getPagedGenerator, hasField, NormalizedParent, Nullable, Page } from './libs/core';
 import { DEFAULT_DOCS_PAGE_LIMIT } from './libs/constants';
-import { assertCursor, assertLimit, assertPlaceQualifier, 
+import { assertCursor, assertLimit, assertPlaceInput, 
   assertTypeQualifier, assertUuidQualifier } from './libs/parameter-validators';
+import { InvalidArgumentError } from './libs/error';
 
 /** */
 export namespace v1 {
@@ -45,14 +46,14 @@ export namespace v1 {
   
   const createPlaceDoc =
   <T>(
-      localFn: (c: LocalDataContext) => (qualifier: PlaceQualifier) => Promise<T>,
-      remoteFn: (c: RemoteDataContext) => (qualifier: PlaceQualifier) => Promise<T>,
+      localFn: (c: LocalDataContext) => (input: PlaceInput) => Promise<T>,
+      remoteFn: (c: RemoteDataContext) => (input: PlaceInput) => Promise<T>,
     ) => (context: DataContext) => {
       assertDataContext(context);
       const fn = adapt(context, localFn, remoteFn);
-      return async (qualifier: PlaceQualifier): Promise<T> => {
-        assertPlaceQualifier(qualifier);
-        return fn(qualifier);
+      return async (input: PlaceInput): Promise<T> => {
+        assertPlaceInput(input);
+        return fn(input);
       };
     };
 
@@ -138,4 +139,75 @@ export namespace v1 {
    * @throws Error if a data context is not provided
    */
   export const createPlace = createPlaceDoc(Local.Place.v1.createPlace, Remote.Place.v1.createPlace);
+
+  
+  
+/** 
+ * An input object for a place
+ */
+export type PlaceInput = Contact.v1.ContactInput & Readonly<{
+  parent?: string;
+  contact?: string;
+  place_id?: string;
+}>
+
+/**
+ * Builds an input for creation and update of a place with the given fields
+ * @param data object containing the fields for a person
+ * @returns the place input
+ * @throws Error if data is not an object
+ * @throws Error if type is not provided or is empty
+ * @throws Error if name is not provided or is empty
+ * @throws Error if parent is not provided or is empty 
+ * @throws Error if contact is present and empty. 
+ * @throws Error if reported_date is not in a valid format. 
+ * Valid formats are 'YYYY-MM-DDTHH:mm:ssZ', 'YYYY-MM-DDTHH:mm:ss.SSSZ', or <unix epoch>.
+ */
+export const byPlaceInput = (data:unknown): PlaceInput => {
+  const input = Contact.v1.byContactInputNonAssertive(data);
+
+  if (!isValidPlaceContact(input)) {
+    throw new InvalidArgumentError(
+      `Missing or empty required field (contact) for [${JSON.stringify(input)}].`
+    );
+  }
+
+  if (!isValidPlaceParent(input)) {
+    throw new InvalidArgumentError(
+      `Missing or empty required field (parent) for [${JSON.stringify(input)}].`
+    );
+  }
+  
+  return input as PlaceInput;
+};
+
+/** @internal*/
+export const isPlaceInput = (data:unknown) : data is PlaceInput => {
+  if (!Contact.v1.checkContactInputFields(data)) {
+    return false;
+  }
+
+  if (!isValidPlaceParent(data)){
+    return false;
+  }
+
+  return isValidPlaceContact(data);
+};
+
+/** @internal*/
+const isValidPlaceContact = (data:Record<string, unknown>) : boolean => {
+  if (!hasField(data, {name: 'contact', type: 'string'})) {
+    return true;
+  }
+  // If `contact` is present, it must be a non-empty string.  
+  return hasField(data, {name: 'contact', type: 'string', ensureTruthyValue: true});
+};
+
+const isValidPlaceParent = (data:Record<string, unknown>) : boolean => {
+  if (!hasField(data, {name: 'parent', type: 'string'})) {
+    return true;
+  }
+  // If `parent` is present, it must be a non-empty string.  
+  return hasField(data, {name: 'parent', type: 'string', ensureTruthyValue: true});
+};
 }
